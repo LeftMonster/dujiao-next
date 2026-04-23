@@ -33,7 +33,6 @@ jobs:
 
       - name: Build binary
         run: |
-          cd api
           CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o dujiao-api ./cmd/server
 
       - name: Deploy to server
@@ -55,7 +54,7 @@ jobs:
           port: ${{ inputs.deploy_port }}
           username: ${{ inputs.deploy_user }}
           password: ${{ inputs.deploy_password }}
-          source: "api/dujiao-api"
+          source: "dujiao-api"
           target: "/opt/dujiao/api/"
           strip_components: 1
 
