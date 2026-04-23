@@ -48,15 +48,13 @@ jobs:
             mkdir -p /opt/dujiao/api/uploads
 
       - name: Upload binary
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ inputs.deploy_host }}
-          port: ${{ inputs.deploy_port }}
-          username: ${{ inputs.deploy_user }}
-          password: ${{ inputs.deploy_password }}
-          source: "dujiao-api"
-          target: "/opt/dujiao/api/"
-          strip_components: 1
+        run: |
+          sudo apt-get install -y sshpass
+          sshpass -p "${{ inputs.deploy_password }}" scp \
+            -P ${{ inputs.deploy_port }} \
+            -o StrictHostKeyChecking=no \
+            dujiao-api \
+            ${{ inputs.deploy_user }}@${{ inputs.deploy_host }}:/opt/dujiao/api/dujiao-api
 
       - name: Start / restart service
         uses: appleboy/ssh-action@v1.0.3
