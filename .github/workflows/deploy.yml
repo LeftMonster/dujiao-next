@@ -1,0 +1,95 @@
+name: Deploy API
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_host:
+        description: '服务器 IP 或域名'
+        required: true
+      deploy_port:
+        description: 'SSH 端口'
+        required: true
+        default: '22'
+      deploy_user:
+        description: 'SSH 用户名'
+        required: true
+        default: 'root'
+      deploy_password:
+        description: 'SSH 密码'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build binary
+        run: |
+          cd api
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o dujiao-api ./cmd/server
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.deploy_host }}
+          port: ${{ inputs.deploy_port }}
+          username: ${{ inputs.deploy_user }}
+          password: ${{ inputs.deploy_password }}
+          script: |
+            mkdir -p /opt/dujiao/api/db
+            mkdir -p /opt/dujiao/api/logs
+            mkdir -p /opt/dujiao/api/uploads
+
+      - name: Upload binary
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ inputs.deploy_host }}
+          port: ${{ inputs.deploy_port }}
+          username: ${{ inputs.deploy_user }}
+          password: ${{ inputs.deploy_password }}
+          source: "api/dujiao-api"
+          target: "/opt/dujiao/api/"
+          strip_components: 1
+
+      - name: Start / restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.deploy_host }}
+          port: ${{ inputs.deploy_port }}
+          username: ${{ inputs.deploy_user }}
+          password: ${{ inputs.deploy_password }}
+          script: |
+            chmod +x /opt/dujiao/api/dujiao-api
+
+            # 写入 systemd service（首次部署自动创建）
+            cat > /etc/systemd/system/dujiao-api.service << 'EOF'
+            [Unit]
+            Description=Dujiao Next API
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=/opt/dujiao/api
+            ExecStart=/opt/dujiao/api/dujiao-api -mode api
+            Restart=on-failure
+            RestartSec=5
+            StandardOutput=append:/opt/dujiao/api/logs/stdout.log
+            StandardError=append:/opt/dujiao/api/logs/stderr.log
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            systemctl daemon-reload
+            systemctl enable dujiao-api
+            systemctl restart dujiao-api
+            systemctl status dujiao-api --no-pager
